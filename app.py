@@ -597,11 +597,36 @@ def answer_finance_question(user_id, question):
 
 
 def extract_amount_from_receipt(image):
-    text = pytesseract.image_to_string(image)
-    matches = re.findall(r"\\b(?:total|amount)\\s*[:]?\\s*₹?([\\d,.]+)", text, re.IGNORECASE)
-    if matches:
-        return float(matches[-1].replace(',', ''))
+    import requests
+    import base64
+    from io import BytesIO
+
+    api_key = "helloworld"  # Replace with your real key from https://ocr.space/OCRAPI
+    url_api = "https://api.ocr.space/parse/image"
+
+    # Convert image to base64 string
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    payload = {
+        'base64Image': f'data:image/png;base64,{img_str}',
+        'language': 'eng',
+        'apikey': api_key,
+    }
+
+    try:
+        response = requests.post(url_api, data=payload)
+        result = response.json()
+        text = result["ParsedResults"][0]["ParsedText"]
+        matches = re.findall(r"(?:total|amount)\\s*[:]?\\s*₹?([\\d,.]+)", text, re.IGNORECASE)
+        if matches:
+            return float(matches[-1].replace(',', ''))
+    except Exception as e:
+        print("OCR API error:", e)
+
     return None
+
 
 
 def show_dashboard_page(user_id):
