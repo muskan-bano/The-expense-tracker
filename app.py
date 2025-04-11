@@ -550,6 +550,36 @@ def get_financial_recommendation(user_id):
                 "instruments like mutual funds, index funds, or even start an emergency fund if you haven’t.")
 
 
+def answer_finance_question(user_id, question):
+    """Simple rule-based Q&A engine for financial questions"""
+    df = get_transactions(user_id)
+    if df.empty:
+        return "No data available yet. Add some income and expenses first."
+
+    question = question.lower()
+    
+    if "save" in question and "month" in question:
+        return "Try using the 50/30/20 rule: Allocate 20% of your income to savings. Reduce discretionary expenses."
+
+    if "biggest expense" in question:
+        expense_df = df[df['type'] == 'expense']
+        if expense_df.empty:
+            return "You have not recorded any expenses yet."
+        top = expense_df.groupby('category')['amount'].sum().sort_values(ascending=False).head(1)
+        return f"Your biggest expense this month is in category: {top.index[0]} (Rs{top.values[0]:.2f})"
+
+    if "income" in question:
+        total_income = df[df['type'] == 'income']['amount'].sum()
+        return f"Your total income so far is Rs{total_income:.2f}"
+
+    if "balance" in question or "left" in question:
+        income = df[df['type'] == 'income']['amount'].sum()
+        expense = df[df['type'] == 'expense']['amount'].sum()
+        return f"Your balance is Rs{income - expense:.2f}"
+
+    return "I'm still learning! Try asking about your income, biggest expense, or savings."
+
+
 def show_dashboard_page(user_id):
     """Show the dashboard overview page"""
     st.title("Dashboard")
@@ -591,6 +621,12 @@ def show_dashboard_page(user_id):
     # 💡 Show AI Recommendation
     with st.expander("💡 Financial Recommendation"):
         st.info(get_financial_recommendation(user_id))
+
+    # 🧠 Finance Q&A Chat
+    with st.expander("🧠 Ask Financial Assistant"):
+        question = st.text_input("Ask a question like 'What's my biggest expense this month?'")
+        if question:
+            st.success(answer_finance_question(user_id, question))
 
     # Add new transaction form
     st.subheader("Add New Transaction")
