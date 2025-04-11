@@ -525,6 +525,7 @@ def show_dashboard(user_id, username, is_admin):
     elif page == "Settings":
         show_settings_page(user_id)
 
+
 def get_financial_recommendation(user_id):
     """Generate savings and investment suggestions based on user behavior"""
     df = get_transactions(user_id)
@@ -551,33 +552,45 @@ def get_financial_recommendation(user_id):
 
 
 def answer_finance_question(user_id, question):
-    """Simple rule-based Q&A engine for financial questions"""
+    """NLP-enhanced financial assistant using keyword + fuzzy logic"""
+    import re
+    from difflib import get_close_matches
+
     df = get_transactions(user_id)
     if df.empty:
         return "No data available yet. Add some income and expenses first."
 
     question = question.lower()
-    
-    if "save" in question and "month" in question:
+    keywords = ["save", "month", "biggest expense", "income", "balance", "left"]
+
+    # Fuzzy match
+    matched = get_close_matches(question, keywords, n=1, cutoff=0.4)
+    if matched:
+        keyword = matched[0]
+    else:
+        keyword = question
+
+    if re.search(r"save.*month", keyword):
         return "Try using the 50/30/20 rule: Allocate 20% of your income to savings. Reduce discretionary expenses."
 
-    if "biggest expense" in question:
+    if "biggest expense" in keyword:
         expense_df = df[df['type'] == 'expense']
         if expense_df.empty:
             return "You have not recorded any expenses yet."
         top = expense_df.groupby('category')['amount'].sum().sort_values(ascending=False).head(1)
         return f"Your biggest expense this month is in category: {top.index[0]} (Rs{top.values[0]:.2f})"
 
-    if "income" in question:
+    if "income" in keyword:
         total_income = df[df['type'] == 'income']['amount'].sum()
         return f"Your total income so far is Rs{total_income:.2f}"
 
-    if "balance" in question or "left" in question:
+    if "balance" in keyword or "left" in keyword:
         income = df[df['type'] == 'income']['amount'].sum()
         expense = df[df['type'] == 'expense']['amount'].sum()
         return f"Your balance is Rs{income - expense:.2f}"
 
-    return "I'm still learning! Try asking about your income, biggest expense, or savings."
+    return "🤖 I'm still learning! Try asking about your savings, income, balance, or biggest expense."
+
 
 
 def show_dashboard_page(user_id):
