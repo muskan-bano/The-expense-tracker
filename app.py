@@ -681,7 +681,6 @@ def show_dashboard_page(user_id):
                         st.warning(f"🚨 Alert: You have exceeded your monthly budget of Rs{budget:.2f}!")
                     st.rerun()
 
-
     
     # Recent transactions
     st.subheader("Recent Transactions")
