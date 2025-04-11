@@ -8,6 +8,9 @@ import io
 import os
 import uuid
 import csv
+import re
+import pytesseract
+from PIL import Image
 from pathlib import Path
 
 # Page configuration
@@ -593,18 +596,23 @@ def answer_finance_question(user_id, question):
 
 
 
+def extract_amount_from_receipt(image):
+    text = pytesseract.image_to_string(image)
+    matches = re.findall(r"\\b(?:total|amount)\\s*[:]?\\s*₹?([\\d,.]+)", text, re.IGNORECASE)
+    if matches:
+        return float(matches[-1].replace(',', ''))
+    return None
+
+
 def show_dashboard_page(user_id):
     """Show the dashboard overview page"""
     st.title("Dashboard")
 
-    # Get current month's transactions
     today = datetime.now()
     start_of_month = today.replace(day=1).strftime('%Y-%m-%d')
     end_of_month = datetime(today.year, today.month + 1, 1).strftime('%Y-%m-%d') if today.month < 12 else datetime(today.year + 1, 1, 1).strftime('%Y-%m-%d')
-
     transactions_df = get_transactions(user_id, start_of_month, end_of_month)
 
-    # Calculate summaries
     if transactions_df.empty:
         total_income = 0
         total_expenses = 0
@@ -613,11 +621,8 @@ def show_dashboard_page(user_id):
         total_expenses = transactions_df[transactions_df['type'] == 'expense']['amount'].sum()
 
     balance = total_income - total_expenses
-
-    # Budget check
     budget = get_budget(user_id)
 
-    # Display summary cards
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Income", f"Rs{total_income:.2f}", delta=None)
@@ -631,58 +636,51 @@ def show_dashboard_page(user_id):
     elif budget:
         st.success(f"You're within your monthly budget. Remaining: Rs{budget - total_expenses:.2f}")
 
-    # 💡 Show AI Recommendation
     with st.expander("💡 Financial Recommendation"):
         st.info(get_financial_recommendation(user_id))
 
-    # 🧠 Finance Q&A Chat
     with st.expander("🧠 Ask Financial Assistant"):
-        question = st.text_input("Ask a question like 'What's my biggest expense this month?'")
+        question = st.text_input("Ask a question like 'What's my biggest expense this month?' or 'How to save 5000?'")
         if question:
             st.success(answer_finance_question(user_id, question))
 
-    # Add new transaction form
-    st.subheader("Add New Transaction")
+    with st.expander("🧾 Upload Receipt for OCR"):
+        uploaded = st.file_uploader("Upload Receipt Image", type=["jpg", "jpeg", "png"])
+        if uploaded:
+            img = Image.open(uploaded)
+            st.image(img, caption="Uploaded Receipt", use_column_width=True)
+            amount = extract_amount_from_receipt(img)
+            if amount:
+                st.success(f"Detected amount: Rs{amount:.2f}")
+            else:
+                st.warning("Could not detect amount. Please try a clearer image.")
 
+    st.subheader("Add New Transaction")
     with st.form("transaction_form"):
         col1, col2 = st.columns(2)
-
         with col1:
             transaction_type = st.selectbox("Transaction Type", ["expense", "income"])
             amount = st.number_input("Amount", min_value=0.01, format="%.2f")
-
         with col2:
             categories_df = get_categories(transaction_type)
             category_list = categories_df['name'].tolist() if not categories_df.empty else []
-
             category = st.selectbox("Category", category_list)
             date = st.date_input("Date", datetime.now())
-
         note = st.text_area("Note (Optional)", height=100)
         submit = st.form_submit_button("Add Transaction")
-
         if submit:
             if amount <= 0:
                 st.error("Amount must be greater than zero!")
             else:
-                success = add_transaction(
-                    user_id,
-                    transaction_type,
-                    amount,
-                    category,
-                    date.strftime('%Y-%m-%d'),
-                    note
-                )
+                success = add_transaction(user_id, transaction_type, amount, category, date.strftime('%Y-%m-%d'), note)
                 if success:
                     st.success("Transaction added successfully!")
-
-                    # Alert user if budget exceeded after new transaction
                     new_total_expense = get_transactions(user_id)[get_transactions(user_id)['type'] == 'expense']['amount'].sum()
                     budget = get_budget(user_id)
                     if budget and new_total_expense > budget:
                         st.warning(f"🚨 Alert: You have exceeded your monthly budget of Rs{budget:.2f}!")
-
                     st.rerun()
+
 
     
     # Recent transactions
